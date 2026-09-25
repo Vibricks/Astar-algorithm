@@ -11,6 +11,18 @@ I created this algorithm based on my understanding from youtube videos and count
 ## performance
 After many optimizations, the latest version performs on average 5-7ms faster than my old version.
 
+## how to use
+
+firstly, to see how my algorithm searches for paths, ensure that you are running Astar-DEMO.py in order to see the visualization of the algorithm. The other file (Astar.py) does not have that feature as it will show instead how fast the algorithm has performed. 
+
+Please note that can you change the maps. Here are the lists of maps corresponding to each number: 
+
+
+
+While the program is running, simply press the number corresponding to you map choice and press SPACE on your keyboard to watch the algorithm pathfind to its target.
+
+Please note that can you change the maps. Here are the lists of maps corresponding
+
 Feel free to check out my code and let me know your thoughts. 
 
 

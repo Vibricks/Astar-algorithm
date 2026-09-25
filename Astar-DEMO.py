@@ -1,20 +1,17 @@
 import pygame
 from pygame import Vector2 as vec
-from math import sqrt
-from pygame.locals import*
-from time import perf_counter
 import heapq
 from itertools import count
+from math import sqrt
 import numpy as np
+from time import sleep
 pygame.init()
 
-HEIGHT = 800
+HEIGHT = 830
 WIDTH = 1400
 
 screen = pygame.display.set_mode((WIDTH,HEIGHT))
-run = True
-font = pygame.font.Font(None,15)
-clock = pygame.time.Clock()
+
 
 class move_rect:
     def __init__(self,rect):
@@ -48,13 +45,13 @@ class move_rect:
         
 class Astar():
     class path_node():
-        def __init__(self,pos,direction,target,curr_g,rect):
-            self.rect = rect
+        def __init__(self,pos,direction,target_rect,curr_g,x,y):
+            self.rect = pygame.Rect(x,y,50,50)
             self.pos = pos # location on the tilemap
             self.direction = vec(direction) 
             self.parent = self.neg_tuple(direction)
-            self.gcost = curr_g + 5 # ground cost from moving to each node
-            self.hcost = (pos[0] - target[0])**2 + (pos[1] - target[1])**2 # calculates the heuristic (distance between two points)
+            self.gcost = curr_g + 50 # ground cost from moving to each node
+            self.hcost = sqrt((target_rect.x - x)**2 + (target_rect.y - y)**2) # calculates the heuristic (distance between two points)
             self.fcost = self.gcost + self.hcost # sums them together
 
         def neg_tuple(self,tpl):
@@ -85,7 +82,7 @@ class Astar():
         return tuple(int(x + y) for x, y in zip(a, b))
     
    
-    def pathfind(self,target:tuple): #recursion boolean allows the method to repeat itself within itself
+    def pathfind(self,target:tuple,target_rect): #recursion boolean allows the method to repeat itself within itself
         if self.loop == False:
             
             self.curr_g = 0
@@ -96,7 +93,7 @@ class Astar():
             self.start = self.pos
  
             while not self.pos == target: 
-                clock.tick(15)
+                clock.tick(20)
                 
                 self.found = False
                 self.neighbors = []
@@ -110,7 +107,7 @@ class Astar():
                     
                     if self.tilemap[self.is_barrier[0],self.is_barrier[1]] !=  1 and not self.is_barrier in self.closed:
                         offset = (self.rect.x + direction[0]*60,self.rect.y + direction[1]*60)
-                        self.neighbors.append(self.path_node(self.is_barrier,direction,target,self.curr_g,pygame.Rect(offset[0],offset[1],50,50)))
+                        self.neighbors.append(self.path_node(self.is_barrier,direction, target_rect, self.curr_g,offset[0],offset[1]))
 
                         pygame.draw.rect(screen,(255,255,255),pygame.Rect(offset[0],offset[1],50,50))
 
@@ -121,7 +118,6 @@ class Astar():
                         if neighbor.pos == element[-1].pos: #there is a neighbor in the open list
                             self.found = True
                             if element[-1].gcost > neighbor.gcost:  #compares gcost and if there is a better path then updates it           
-                                element[-1].gcost = neighbor.gcost
                                 element[-1].fcost = neighbor.gcost + element[-1].hcost
                                 element[-1].parent = neighbor.direction    
                     if self.found == False:  #neighbor was not in the open list   
@@ -164,7 +160,6 @@ class Astar():
 
 
 def convert_array(map_design):
-    global target
     arr = []
     rects = []
     x,y = 50,50
@@ -175,7 +170,8 @@ def convert_array(map_design):
                 Row.append(1)
                 rects.append(pygame.Rect(x,y,50,50))
             elif col == 'T':
-                target = pygame.Rect(x,y,50,50)
+                target_rect = pygame.Rect(x,y,50,50)
+
                 Row.append(3)
             elif col == 'x':
                 bot_x,bot_y = x,y
@@ -190,7 +186,7 @@ def convert_array(map_design):
         x = 50
         y += 60
         
-    return np.array(arr),rects,bot_x,bot_y
+    return np.array(arr),rects,bot_x,bot_y,target_rect
 
 
        
@@ -207,19 +203,13 @@ class chaser():
         self.shadow = Astar(tilemap,pos,self.rect.copy()) #in order to pathfind again i must redefine this
         self.count = 0
        
-        self.speed = 5
-        self.skip = False
-    def move(self,target):
-        self.sol = self.shadow.pathfind(target) #gives a list containing vectors that pathfind to the target
-        
-        if self.skip == False:
-            print(str((perf_counter() - start_time)*1000) + 'ms')
-            self.skip = True
-        
+        self.speed = 10
+       
+    def move(self,target,target_rect):
+        self.sol = self.shadow.pathfind(target,target_rect) #gives a list containing vectors that pathfind to the target
         clock.tick(144)
-        if self.count >= len(self.sol):
-            print('finish!')
-            return True
+        
+        
         if self.moving == False: #prevents accidental incrementation during movement
             self.pos += self.sol[self.count] *60
         if self.Move.move_rect(self.pos.x,self.pos.y,self.speed) == True:
@@ -230,6 +220,10 @@ class chaser():
         else:
             self.moving = True
         
+        if self.count >= len(self.sol):            
+            return True
+        else:
+            return False
 
     def draw(self,surface):
         pygame.draw.rect(surface,((0,0,255)),self.rect)
@@ -237,12 +231,8 @@ class chaser():
 
 
 
-
-start = False
-
-
 model1 = ['####################',
-'#.-...#..x..#......#',
+'#.....#..x..#......#',
 '###.#.#.###.#.######',
 '#...#.#...#.#......#',
 '#.###.###.#.######.#',
@@ -253,8 +243,7 @@ model1 = ['####################',
 '###.#.........#....#',
 '#...###########.####',
 '#.###............T##',
-'#.....##############',
-'####################']
+'####################',]
 model2 = ['#####################',
 '#x....#T........#...#',
 '#.#######.#####.#.###',
@@ -264,41 +253,18 @@ model2 = ['#####################',
 '#.#########.#.#######',
 '#...........#......-#',
 '#####################']
-model3 = ['##########',
-          '#T-#-----#',
-          '##-#-----#',
-          '##----#-##',
-          '##-##-#-##',
-          '##--#-#-##',
-          '###---#-##',
-          '---#--#--#',
-          '---##---x#',
-          '---#######']
-model4 = ['##########---',
-          '##-#####-#---',
-          '##----##-#---',
-          '##-##-##-### ',
-          '##-##T##---# ',
-          '##-#####-###-',
-          '##--x----###-',
-          '######-#####-',
-          '######-#####-',
-          '#####---####-',
-          '#####-#-####-',
-          '############-',
-          ]
-model5 = ['#####################',
+model3 = ['#####################',
 '#x....#.............#',
 '#.##.#.###########.##',
 '#.#..#.#.........#..#',
 '#.#.##.#.#######.##.#',
 '#.#....#.#.....#....#',
-'#.######.#.###.######',
-'#........#...#...T..#',
+'#.######.#.###T######',
+'#........#..........#',
 '#..########.#.#######',
 '#...........#.......#',
 '#####################']
-model6 = ['#####################',
+model4 = ['#####################',
 '#x........#........T#',
 '#.........#.........#',
 '#....######.........#',
@@ -308,7 +274,7 @@ model6 = ['#####################',
 '#...................#',
 '#...................#',
 '#####################']
-model7 = [
+model5 = [
 '############',
 '#x.....#...#',
 '#......#...#',
@@ -319,7 +285,7 @@ model7 = [
 '#----------#',
 '#.........T#',
 '############']
-model8 = [
+model6 = [
 '##################',
 "#-----#----------#",
 "#-----#------#---#",
@@ -333,80 +299,131 @@ model8 = [
 '##################'
 
 ]
-model9 = ['##########',
+model7 = ['##########',
           '#--------#',
           '#--#T----#',
           '#--#####-#',
           '#--------#',
           '#------x-#',
           '##########']
-model10 =    ['###################',
-              '#x-------#--------#',
-              '#-##-###-#-###-##-#',
-              '#-##-###-#-###-##-#',
-              '#-----------------#',
-              '#-##-#-#####-#-##-#',
-              '#----#---#---#----#',
-              '####-###-#-###-####',
-              '####-#-------#-####',
-              '####-#-#####-#-####',
-              '-------#####-------',
-              '####-#---T---#-####',
-              '####-#-#####-#-####',
-              '#--------#---------',
-              '#-##-###-#-###-##-#',
-              '#--#-----------#--#',
-              '##-#-#-#####-#-#-##',
-              '#----#---#---#----#',
-              '#-######-#-######-#',
-              '#-----------------#',
-              '###################'
-              ]
 
-design = model6
 
-tilemap_array,tilemap_rects,bot_x,bot_y = convert_array(design)
-# gets coords on tilemap for bot
-x,y = np.where(tilemap_array == 2)
-pos = (x[0],y[0])
+selection = {pygame.K_1:model1,
+             pygame.K_2:model2,
+             pygame.K_3:model3,
+             pygame.K_4:model4,
+             pygame.K_5:model5,
+             pygame.K_6:model6,
+             pygame.K_7:model7,
+                }
 
-bot = chaser(bot_x,bot_y,50,50,tilemap_array,pos)
+font_50 = pygame.font.Font(None,50)
 
-# gets coords on tilemap for target
-x,y = np.where(tilemap_array == 3)
-target_pos = (x[0],y[0])
 
 cooldown = False
+select_map = True
+greeting = font_50.render('Press a number on your keyboard to select a map',True,(255,255,255))
+run = True
+font = pygame.font.Font(None,15)
+clock = pygame.time.Clock()
+start = False
+pause = False
+show_text = True
+
+
 
 while run == True:
-    clock.tick(144)
-    start_time = pygame.time.get_ticks()
-    screen.fill((0,0,0))
-    
-    key = pygame.key.get_pressed()
-    pygame.draw.rect(screen,((0,255,0)),target)
-
-    for rect in tilemap_rects:
-        pygame.draw.rect(screen,(255,0,0),rect)
-
-    bot.draw(screen)
-    if cooldown == False:
-        if key[K_SPACE] == True:
-            start_time = perf_counter()
-            start = True
-
-    if start == True:
-        if bot.move(target_pos) == True:
-         
-            start = False
-            cooldown = True
-            
+    while select_map == True:
+        screen.fill((0,0,0))
+        screen.blit(greeting,(0,0))
         
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            run = False
+        key = pygame.key.get_pressed()
+        
+        pygame.display.flip()
+        for i,k in enumerate(selection,start = 0):
+            if key[k] == True:
+                design = selection[k]
+                txt = font_50.render(f'You have chosen map no. {i+1}',True,(255,255,255))
+                txt2 = font_50.render("press the SPACE BAR to start",True,(255,255,255))
+                screen.fill((0,0,0))
+                screen.blit(txt,(WIDTH//2 - 300,HEIGHT//2))
+                
+                pygame.display.flip()
+                
+                tilemap_array,tilemap_rects,bot_x,bot_y,target_rect = convert_array(design)
+                # gets coords on tilemap for bot
+                x,y = np.where(tilemap_array == 2)
+                pos = (x[0],y[0])
 
-    pygame.display.flip()
+                bot = chaser(bot_x,bot_y,50,50,tilemap_array,pos)
+
+                # gets coords on tilemap for target
+                x,y = np.where(tilemap_array == 3)
+                target_pos = (x[0],y[0])
+                sleep(1)
+                select_map = False
+        # if exit
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+                select_map = False
+    if run == False:
+        pygame.quit()
+    else:
+
+        # algorithm begins
+        clock.tick(144)
+        
+        if cooldown == False:
+            if key[pygame.K_SPACE] == True: 
+                start = True
+                
+                show_text = False
+        
+        if start == True:
+            txt2.fill((0,0,0))
+            screen.blit(txt2,(WIDTH//2 - 300,0))
+            if bot.move(target_pos,target_rect) == True:               
+                pause = True
+                # map has been solved
+                # choose another map
+                select_map = True
+                start = False
+                cooldown = False
+                show_text = True
+                
+            else:
+                cooldown = True
+       
+        
+        screen.fill((0,0,0))
+       
+        
+        screen.blit(txt2,(WIDTH//2 - 300,0))
+            
+        key = pygame.key.get_pressed()
+        
+        pygame.draw.rect(screen,((0,255,0)),target_rect)
+        
+        for rect in tilemap_rects:
+            pygame.draw.rect(screen,(255,0,0),rect)
+
+        bot.draw(screen)
+        pygame.display.flip()
+        
+        if pause == True:
+            sleep(1)
+            pause = False
+
+        
+         # if exit during the algorithm
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+        
+        
+        
+        
 
 pygame.quit()
 
